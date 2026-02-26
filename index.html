@@ -403,8 +403,8 @@
       function resizeSimCanvas() {
         if (!simCanvas || !simCtx) return;
         const dpi = Math.max(window.devicePixelRatio || 1, 1);
-        displayWidth = simCanvas.clientWidth;
-        displayHeight = simCanvas.clientHeight || 280;
+        displayWidth = simCanvas.clientWidth || displayWidth || 600;
+        displayHeight = simCanvas.clientHeight || displayHeight || 280;
         simCanvas.width = displayWidth * dpi;
         simCanvas.height = displayHeight * dpi;
         simCtx.setTransform(dpi, 0, 0, dpi, 0, 0);
