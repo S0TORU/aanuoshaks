@@ -109,6 +109,27 @@
         pointer-events: none;
         filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.08));
       }
+      .sim-card {
+        margin-top: 28px;
+        background: rgba(255, 255, 255, 0.75);
+        border-radius: 1.5rem;
+        padding: 1.75rem;
+        border: 1px solid rgba(15, 118, 110, 0.15);
+        box-shadow: 0 30px 45px rgba(0, 0, 0, 0.12);
+      }
+      .sim-card canvas {
+        width: 100%;
+        height: 280px;
+        border-radius: 1.25rem;
+        background: rgba(15, 15, 15, 0.03);
+        display: block;
+      }
+      .sim-caption {
+        margin-top: 0.85rem;
+        color: var(--muted);
+        font-size: 0.98rem;
+        letter-spacing: 0.02em;
+      }
     </style>
   </head>
   <body>
@@ -208,8 +229,8 @@
             the final inference pipeline.
           </li>
           <li>
-            when hardware acceleration, signal intelligence, and simulation are
-            thoughtfully integrated, you start solving problems that used to
+            when hardware acceleration, active feedback loops, and simulation
+            are thoughtfully integrated, you start solving problems that used to
             feel out of reach.
           </li>
           <li>
@@ -218,6 +239,16 @@
             forward.
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2 class="section-heading">Interactive Simulation</h2>
+        <div class="sim-card">
+          <canvas id="simCanvas"></canvas>
+          <p class="sim-caption">
+            Tap, click, or drag anywhere over the canvas to tug on the elastic ribbon and watch the system settle.
+          </p>
+        </div>
       </section>
 
       <footer class="footer">
@@ -345,6 +376,168 @@
       }
 
       window.addEventListener("load", initThree);
+    </script>
+    <script>
+      const simCanvas = document.getElementById("simCanvas");
+      const simCtx = simCanvas?.getContext("2d");
+      const nodes = [];
+      const nodeCount = 16;
+      const pointer = { x: 0, y: 0, down: false };
+      let displayWidth = 0;
+      let displayHeight = 0;
+      let baselineY = 0;
+
+      function initRibbon() {
+        if (!simCanvas || !simCtx) return;
+        resizeSimCanvas();
+        window.addEventListener("resize", resizeSimCanvas);
+        simCanvas.addEventListener("pointerdown", handlePointerDown);
+        simCanvas.addEventListener("pointermove", handlePointerMove);
+        simCanvas.addEventListener("pointerup", handlePointerUp);
+        simCanvas.addEventListener("pointerleave", () => {
+          pointer.down = false;
+        });
+        requestAnimationFrame(animateRibbon);
+      }
+
+      function resizeSimCanvas() {
+        if (!simCanvas || !simCtx) return;
+        const dpi = Math.max(window.devicePixelRatio || 1, 1);
+        displayWidth = simCanvas.clientWidth;
+        displayHeight = simCanvas.clientHeight || 280;
+        simCanvas.width = displayWidth * dpi;
+        simCanvas.height = displayHeight * dpi;
+        simCtx.setTransform(dpi, 0, 0, dpi, 0, 0);
+        baselineY = displayHeight * 0.55;
+        createNodes();
+      }
+
+      function createNodes() {
+        if (displayWidth === 0 || displayHeight === 0) return;
+        nodes.length = 0;
+        const spacing = displayWidth / (nodeCount - 1);
+        for (let i = 0; i < nodeCount; i++) {
+          nodes.push({
+            x: spacing * i,
+            y: baselineY,
+            vx: 0,
+            vy: 0,
+          });
+        }
+      }
+
+      function handlePointerDown(event) {
+        updatePointer(event);
+        pointer.down = true;
+        simCanvas.setPointerCapture(event.pointerId);
+      }
+
+      function handlePointerMove(event) {
+        updatePointer(event);
+      }
+
+      function handlePointerUp(event) {
+        pointer.down = false;
+        simCanvas.releasePointerCapture(event.pointerId);
+      }
+
+      function updatePointer(event) {
+        if (!simCanvas) return;
+        const rect = simCanvas.getBoundingClientRect();
+        pointer.x = event.clientX - rect.left;
+        pointer.y = event.clientY - rect.top;
+      }
+
+      function animateRibbon() {
+        if (!simCtx || nodes.length === 0) return;
+        updateRibbonPhysics();
+        drawRibbon();
+        requestAnimationFrame(animateRibbon);
+      }
+
+      function updateRibbonPhysics() {
+        const gravity = 0.16;
+        const damping = 0.93;
+        const anchorPull = 0.004;
+        for (const node of nodes) {
+          node.vy += gravity;
+          node.vy -= (node.y - baselineY) * anchorPull;
+        }
+
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const a = nodes[i];
+          const b = nodes[i + 1];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const rest = displayWidth / (nodeCount - 1);
+          const diff = dist - rest;
+          const force = diff * 0.26;
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          a.vx += fx * 0.5;
+          a.vy += fy * 0.5;
+          b.vx -= fx * 0.5;
+          b.vy -= fy * 0.5;
+        }
+
+        if (pointer.down) {
+          for (const node of nodes) {
+            const dx = pointer.x - node.x;
+            const dy = pointer.y - node.y;
+            node.vx += dx * 0.0022;
+            node.vy += dy * 0.0022;
+          }
+        }
+
+        for (const node of nodes) {
+          node.x += node.vx;
+          node.y += node.vy;
+          node.vx *= damping;
+          node.vy *= damping;
+          if (node.y > displayHeight) {
+            node.y = displayHeight;
+            node.vy *= -0.35;
+          }
+          if (node.y < 0) {
+            node.y = 0;
+            node.vy *= -0.35;
+          }
+        }
+      }
+
+      function drawRibbon() {
+        if (!simCtx) return;
+        simCtx.clearRect(0, 0, displayWidth, displayHeight);
+        simCtx.lineCap = "round";
+        const gradient = simCtx.createLinearGradient(0, 0, displayWidth, 0);
+        gradient.addColorStop(0, "rgba(15, 118, 110, 0.9)");
+        gradient.addColorStop(1, "rgba(59, 130, 246, 0.7)");
+        simCtx.strokeStyle = gradient;
+        simCtx.lineWidth = 3;
+        simCtx.beginPath();
+        simCtx.moveTo(nodes[0].x, nodes[0].y);
+        for (let i = 1; i < nodes.length; i++) {
+          simCtx.lineTo(nodes[i].x, nodes[i].y);
+        }
+        simCtx.stroke();
+
+        simCtx.fillStyle = "rgba(15, 118, 110, 0.25)";
+        for (const node of nodes) {
+          simCtx.beginPath();
+          simCtx.arc(node.x, node.y, 6, 0, Math.PI * 2);
+          simCtx.fill();
+        }
+
+        if (pointer.down) {
+          simCtx.fillStyle = "rgba(59, 130, 246, 0.4)";
+          simCtx.beginPath();
+          simCtx.arc(pointer.x, pointer.y, 16, 0, Math.PI * 2);
+          simCtx.fill();
+        }
+      }
+
+      window.addEventListener("load", initRibbon);
     </script>
   </body>
 </html>
