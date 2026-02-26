@@ -119,10 +119,15 @@
       }
       .sim-card canvas {
         width: 100%;
-        height: 280px;
+        height: 340px;
         border-radius: 1.25rem;
         background: rgba(15, 15, 15, 0.03);
         display: block;
+        touch-action: none;
+        cursor: grab;
+      }
+      .sim-card canvas:active {
+        cursor: grabbing;
       }
       .sim-caption {
         margin-top: 0.85rem;
@@ -244,9 +249,9 @@
       <section>
         <h2 class="section-heading">Interactive Simulation</h2>
         <div class="sim-card">
-          <canvas id="simCanvas"></canvas>
+          <canvas id="sim3d"></canvas>
           <p class="sim-caption">
-            Tap, click, or drag anywhere over the canvas to tug on the elastic ribbon and watch the system settle.
+            Click / drag to inject energy into a point-cloud physics field. It settles when you stop.
           </p>
         </div>
       </section>
@@ -378,166 +383,267 @@
       window.addEventListener("load", initThree);
     </script>
     <script>
-      const simCanvas = document.getElementById("simCanvas");
-      const simCtx = simCanvas?.getContext("2d");
-      const nodes = [];
-      const nodeCount = 16;
-      const pointer = { x: 0, y: 0, down: false };
-      let displayWidth = 0;
-      let displayHeight = 0;
-      let baselineY = 0;
+      (function initPointFieldSim() {
+        const canvas = document.getElementById("sim3d");
+        if (!canvas || !window.THREE) return;
 
-      function initRibbon() {
-        if (!simCanvas || !simCtx) return;
-        resizeSimCanvas();
-        window.addEventListener("resize", resizeSimCanvas);
-        simCanvas.addEventListener("pointerdown", handlePointerDown);
-        simCanvas.addEventListener("pointermove", handlePointerMove);
-        simCanvas.addEventListener("pointerup", handlePointerUp);
-        simCanvas.addEventListener("pointerleave", () => {
+        const simScene = new THREE.Scene();
+        const simCamera = new THREE.PerspectiveCamera(52, 1, 0.1, 200);
+        simCamera.position.set(0, 6.2, 12.8);
+        simCamera.lookAt(0, 0, 0);
+
+        const simRenderer = new THREE.WebGLRenderer({
+          canvas,
+          antialias: true,
+          alpha: true,
+        });
+        simRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const cols = 96;
+        const rows = 54;
+        const pointCount = cols * rows;
+        const sizeX = 12.0;
+        const sizeZ = 6.8;
+        const dx = sizeX / (cols - 1);
+        const dz = sizeZ / (rows - 1);
+        const basePositions = new Float32Array(pointCount * 3);
+        const positions = new Float32Array(pointCount * 3);
+        const velocities = new Float32Array(pointCount * 3);
+        const speeds = new Float32Array(pointCount);
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const i = r * cols + c;
+            const i3 = i * 3;
+            const x = -sizeX * 0.5 + c * dx;
+            const z = -sizeZ * 0.5 + r * dz;
+            basePositions[i3] = x;
+            basePositions[i3 + 1] = 0;
+            basePositions[i3 + 2] = z;
+            positions[i3] = x;
+            positions[i3 + 1] = 0;
+            positions[i3 + 2] = z;
+          }
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(positions, 3),
+        );
+        geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
+
+        const material = new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          uniforms: {
+            uTime: { value: 0 },
+            uPointSize: { value: 5.5 },
+          },
+          vertexShader: `
+            attribute float aSpeed;
+            varying float vSpeed;
+            uniform float uTime;
+            uniform float uPointSize;
+            void main() {
+              vSpeed = aSpeed;
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = uPointSize * (1.0 + 0.55 * vSpeed) * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          fragmentShader: `
+            precision mediump float;
+            varying float vSpeed;
+            void main() {
+              vec2 p = gl_PointCoord * 2.0 - 1.0;
+              float r2 = dot(p, p);
+              float core = exp(-3.5 * r2);
+              float halo = exp(-1.25 * r2);
+              vec3 c1 = vec3(0.06, 0.46, 0.43); // teal
+              vec3 c2 = vec3(0.23, 0.51, 0.96); // electric blue
+              vec3 col = mix(c1, c2, clamp(vSpeed * 1.1, 0.0, 1.0));
+              float alpha = (0.9 * core + 0.55 * halo) * (0.65 + 0.55 * clamp(vSpeed, 0.0, 1.0));
+              gl_FragColor = vec4(col, alpha);
+            }
+          `,
+        });
+
+        const points = new THREE.Points(geometry, material);
+        simScene.add(points);
+
+        // Subtle foggy lift so the points feel volumetric without darkening the page.
+        const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+        simScene.add(ambient);
+
+        const raycaster = new THREE.Raycaster();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const pointer = { x: 0, y: 0, down: false, vx: 0, vy: 0 };
+        let lastPointerX = 0;
+        let lastPointerY = 0;
+        let lastT = performance.now();
+
+        function resize() {
+          const w = canvas.clientWidth || 800;
+          const h = canvas.clientHeight || 340;
+          simRenderer.setSize(w, h, false);
+          simCamera.aspect = w / h;
+          simCamera.updateProjectionMatrix();
+        }
+
+        function setPointerFromEvent(event) {
+          const rect = canvas.getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const y = event.clientY - rect.top;
+          const nx = (x / rect.width) * 2 - 1;
+          const ny = -(y / rect.height) * 2 + 1;
+          pointer.vx = x - lastPointerX;
+          pointer.vy = y - lastPointerY;
+          lastPointerX = x;
+          lastPointerY = y;
+          pointer.x = nx;
+          pointer.y = ny;
+        }
+
+        function onPointerDown(event) {
+          pointer.down = true;
+          canvas.setPointerCapture(event.pointerId);
+          setPointerFromEvent(event);
+        }
+        function onPointerMove(event) {
+          setPointerFromEvent(event);
+        }
+        function onPointerUp(event) {
+          pointer.down = false;
+          canvas.releasePointerCapture(event.pointerId);
+        }
+
+        canvas.addEventListener("pointerdown", onPointerDown);
+        canvas.addEventListener("pointermove", onPointerMove);
+        canvas.addEventListener("pointerup", onPointerUp);
+        canvas.addEventListener("pointerleave", () => {
           pointer.down = false;
         });
-        requestAnimationFrame(animateRibbon);
-      }
+        window.addEventListener("resize", resize);
+        resize();
 
-      function resizeSimCanvas() {
-        if (!simCanvas || !simCtx) return;
-        const dpi = Math.max(window.devicePixelRatio || 1, 1);
-        displayWidth = simCanvas.clientWidth || displayWidth || 600;
-        displayHeight = simCanvas.clientHeight || displayHeight || 280;
-        simCanvas.width = displayWidth * dpi;
-        simCanvas.height = displayHeight * dpi;
-        simCtx.setTransform(dpi, 0, 0, dpi, 0, 0);
-        baselineY = displayHeight * 0.55;
-        createNodes();
-      }
-
-      function createNodes() {
-        if (displayWidth === 0 || displayHeight === 0) return;
-        nodes.length = 0;
-        const spacing = displayWidth / (nodeCount - 1);
-        for (let i = 0; i < nodeCount; i++) {
-          nodes.push({
-            x: spacing * i,
-            y: baselineY,
-            vx: 0,
-            vy: 0,
-          });
-        }
-      }
-
-      function handlePointerDown(event) {
-        updatePointer(event);
-        pointer.down = true;
-        simCanvas.setPointerCapture(event.pointerId);
-      }
-
-      function handlePointerMove(event) {
-        updatePointer(event);
-      }
-
-      function handlePointerUp(event) {
-        pointer.down = false;
-        simCanvas.releasePointerCapture(event.pointerId);
-      }
-
-      function updatePointer(event) {
-        if (!simCanvas) return;
-        const rect = simCanvas.getBoundingClientRect();
-        pointer.x = event.clientX - rect.left;
-        pointer.y = event.clientY - rect.top;
-      }
-
-      function animateRibbon() {
-        if (!simCtx || nodes.length === 0) return;
-        updateRibbonPhysics();
-        drawRibbon();
-        requestAnimationFrame(animateRibbon);
-      }
-
-      function updateRibbonPhysics() {
-        const gravity = 0.16;
-        const damping = 0.93;
-        const anchorPull = 0.004;
-        for (const node of nodes) {
-          node.vy += gravity;
-          node.vy -= (node.y - baselineY) * anchorPull;
+        function idx(r, c) {
+          return r * cols + c;
         }
 
-        for (let i = 0; i < nodes.length - 1; i++) {
-          const a = nodes[i];
-          const b = nodes[i + 1];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy) || 1;
-          const rest = displayWidth / (nodeCount - 1);
-          const diff = dist - rest;
-          const force = diff * 0.26;
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force;
-          a.vx += fx * 0.5;
-          a.vy += fy * 0.5;
-          b.vx -= fx * 0.5;
-          b.vy -= fy * 0.5;
-        }
+        // Spring-based surface (stable, cheap) + pointer-driven impulses.
+        function step(dt) {
+          const stiffness = 36.0;
+          const damping = 0.92;
+          const anchor = 8.5;
+          const impulse = 0.015;
+          const posAttr = geometry.attributes.position;
+          const pos = posAttr.array;
 
-        if (pointer.down) {
-          for (const node of nodes) {
-            const dx = pointer.x - node.x;
-            const dy = pointer.y - node.y;
-            node.vx += dx * 0.0022;
-            node.vy += dy * 0.0022;
+          // Anchor back to the base plane and apply neighbor springs.
+          for (let i = 0; i < pointCount; i++) {
+            const i3 = i * 3;
+            const y = pos[i3 + 1];
+            const by = basePositions[i3 + 1];
+            velocities[i3 + 1] += -(y - by) * anchor * dt;
           }
-        }
 
-        for (const node of nodes) {
-          node.x += node.vx;
-          node.y += node.vy;
-          node.vx *= damping;
-          node.vy *= damping;
-          if (node.y > displayHeight) {
-            node.y = displayHeight;
-            node.vy *= -0.35;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const i = idx(r, c);
+              const i3 = i * 3;
+              const y = pos[i3 + 1];
+              let sum = 0;
+              let n = 0;
+              if (r > 0) {
+                sum += pos[(idx(r - 1, c) * 3) + 1];
+                n++;
+              }
+              if (r < rows - 1) {
+                sum += pos[(idx(r + 1, c) * 3) + 1];
+                n++;
+              }
+              if (c > 0) {
+                sum += pos[(idx(r, c - 1) * 3) + 1];
+                n++;
+              }
+              if (c < cols - 1) {
+                sum += pos[(idx(r, c + 1) * 3) + 1];
+                n++;
+              }
+              const avg = n ? sum / n : y;
+              velocities[i3 + 1] += (avg - y) * stiffness * dt;
+            }
           }
-          if (node.y < 0) {
-            node.y = 0;
-            node.vy *= -0.35;
+
+          // Pointer impulse: raycast onto y=0 plane, then inject a gaussian bump.
+          if (pointer.down) {
+            raycaster.setFromCamera(pointer, simCamera);
+            const hit = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(plane, hit)) {
+              const sx = (hit.x + sizeX * 0.5) / sizeX;
+              const sz = (hit.z + sizeZ * 0.5) / sizeZ;
+              const cx = Math.floor(sx * (cols - 1));
+              const cz = Math.floor(sz * (rows - 1));
+              const strength = Math.min(
+                1.8,
+                0.55 + 0.04 * Math.hypot(pointer.vx, pointer.vy),
+              );
+              const radius = 5.5;
+              const dir = pointer.vy < 0 ? 1 : -1;
+              for (let rr = -9; rr <= 9; rr++) {
+                for (let cc = -9; cc <= 9; cc++) {
+                  const r = cz + rr;
+                  const c = cx + cc;
+                  if (r < 0 || r >= rows || c < 0 || c >= cols) continue;
+                  const d2 = rr * rr + cc * cc;
+                  const falloff = Math.exp(-d2 / (radius * radius));
+                  const i = idx(r, c);
+                  velocities[i * 3 + 1] +=
+                    impulse * strength * falloff * dir;
+                }
+              }
+            }
           }
-        }
-      }
 
-      function drawRibbon() {
-        if (!simCtx) return;
-        simCtx.clearRect(0, 0, displayWidth, displayHeight);
-        simCtx.lineCap = "round";
-        const gradient = simCtx.createLinearGradient(0, 0, displayWidth, 0);
-        gradient.addColorStop(0, "rgba(15, 118, 110, 0.9)");
-        gradient.addColorStop(1, "rgba(59, 130, 246, 0.7)");
-        simCtx.strokeStyle = gradient;
-        simCtx.lineWidth = 3;
-        simCtx.beginPath();
-        simCtx.moveTo(nodes[0].x, nodes[0].y);
-        for (let i = 1; i < nodes.length; i++) {
-          simCtx.lineTo(nodes[i].x, nodes[i].y);
-        }
-        simCtx.stroke();
+          for (let i = 0; i < pointCount; i++) {
+            const i3 = i * 3;
+            velocities[i3 + 1] *= damping;
+            pos[i3 + 1] += velocities[i3 + 1] * 60.0 * dt;
 
-        simCtx.fillStyle = "rgba(15, 118, 110, 0.25)";
-        for (const node of nodes) {
-          simCtx.beginPath();
-          simCtx.arc(node.x, node.y, 6, 0, Math.PI * 2);
-          simCtx.fill();
+            // Soft clamp (keeps it clean, no crazy spikes).
+            if (pos[i3 + 1] > 2.2) {
+              pos[i3 + 1] = 2.2;
+              velocities[i3 + 1] *= -0.25;
+            } else if (pos[i3 + 1] < -2.0) {
+              pos[i3 + 1] = -2.0;
+              velocities[i3 + 1] *= -0.25;
+            }
+
+            const sp = Math.min(1, Math.abs(velocities[i3 + 1]) * 0.9);
+            speeds[i] = speeds[i] * 0.88 + sp * 0.12;
+          }
+
+          geometry.attributes.aSpeed.needsUpdate = true;
+          posAttr.needsUpdate = true;
         }
 
-        if (pointer.down) {
-          simCtx.fillStyle = "rgba(59, 130, 246, 0.4)";
-          simCtx.beginPath();
-          simCtx.arc(pointer.x, pointer.y, 16, 0, Math.PI * 2);
-          simCtx.fill();
+        function animate(now) {
+          const dt = Math.min(0.033, (now - lastT) / 1000);
+          lastT = now;
+          material.uniforms.uTime.value = now * 0.001;
+          step(dt);
+          points.rotation.y += 0.08 * dt;
+          simRenderer.render(simScene, simCamera);
+          requestAnimationFrame(animate);
         }
-      }
 
-      window.addEventListener("load", initRibbon);
+        requestAnimationFrame((t) => {
+          lastT = t;
+          requestAnimationFrame(animate);
+        });
+      })();
     </script>
   </body>
 </html>
