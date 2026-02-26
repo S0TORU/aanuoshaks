@@ -110,18 +110,17 @@
         filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.08));
       }
       .sim-card {
-        margin-top: 28px;
-        background: rgba(255, 255, 255, 0.75);
-        border-radius: 1.5rem;
-        padding: 1.75rem;
-        border: 1px solid rgba(15, 118, 110, 0.15);
-        box-shadow: 0 30px 45px rgba(0, 0, 0, 0.12);
+        margin-top: 36px;
+        padding: 0.85rem 0.85rem 0.7rem;
+        border: 1px solid rgba(22, 22, 22, 0.18);
+        border-radius: 0.85rem;
+        background: rgba(255, 255, 255, 0.45);
       }
       .sim-card canvas {
         width: 100%;
-        height: 340px;
-        border-radius: 1.25rem;
-        background: rgba(15, 15, 15, 0.03);
+        height: 312px;
+        border-radius: 0.55rem;
+        background: rgba(15, 15, 15, 0.035);
         display: block;
         touch-action: none;
         cursor: grab;
@@ -130,10 +129,10 @@
         cursor: grabbing;
       }
       .sim-caption {
-        margin-top: 0.85rem;
+        margin-top: 0.55rem;
         color: var(--muted);
-        font-size: 0.98rem;
-        letter-spacing: 0.02em;
+        font-size: 0.88rem;
+        letter-spacing: 0.01em;
       }
     </style>
   </head>
@@ -246,15 +245,12 @@
         </ul>
       </section>
 
-      <section>
-        <h2 class="section-heading">Interactive Simulation</h2>
-        <div class="sim-card">
-          <canvas id="sim3d"></canvas>
-          <p class="sim-caption">
-            Click / drag to inject energy into a point-cloud physics field. It settles when you stop.
-          </p>
-        </div>
-      </section>
+      <div class="sim-card">
+        <canvas id="sim3d"></canvas>
+        <p class="sim-caption">
+          point-cloud field. click or drag to disturb it.
+        </p>
+      </div>
 
       <footer class="footer">
         <a
@@ -383,264 +379,212 @@
       window.addEventListener("load", initThree);
     </script>
     <script>
-      (function initPointFieldSim() {
+      (function initPointCloudSim() {
         const canvas = document.getElementById("sim3d");
-        if (!canvas || !window.THREE) return;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
 
-        const simScene = new THREE.Scene();
-        const simCamera = new THREE.PerspectiveCamera(52, 1, 0.1, 200);
-        simCamera.position.set(0, 6.2, 12.8);
-        simCamera.lookAt(0, 0, 0);
+        const pointer = { x: 0, y: 0, active: false, force: 0 };
+        const points = [];
+        const cols = 70;
+        const rows = 28;
+        let width = 0;
+        let height = 0;
+        let lastTime = performance.now();
 
-        const simRenderer = new THREE.WebGLRenderer({
-          canvas,
-          antialias: true,
-          alpha: true,
-        });
-        simRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        function resize() {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          width = Math.max(600, Math.floor(canvas.clientWidth || 600));
+          height = Math.max(280, Math.floor(canvas.clientHeight || 312));
+          canvas.width = Math.floor(width * dpr);
+          canvas.height = Math.floor(height * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        const cols = 96;
-        const rows = 54;
-        const pointCount = cols * rows;
-        const sizeX = 12.0;
-        const sizeZ = 6.8;
-        const dx = sizeX / (cols - 1);
-        const dz = sizeZ / (rows - 1);
-        const basePositions = new Float32Array(pointCount * 3);
-        const positions = new Float32Array(pointCount * 3);
-        const velocities = new Float32Array(pointCount * 3);
-        const speeds = new Float32Array(pointCount);
-
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const i = r * cols + c;
-            const i3 = i * 3;
-            const x = -sizeX * 0.5 + c * dx;
-            const z = -sizeZ * 0.5 + r * dz;
-            basePositions[i3] = x;
-            basePositions[i3 + 1] = 0;
-            basePositions[i3 + 2] = z;
-            positions[i3] = x;
-            positions[i3 + 1] = 0;
-            positions[i3 + 2] = z;
+          points.length = 0;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const px = (c / (cols - 1)) * width;
+              const py = (r / (rows - 1)) * height;
+              points.push({
+                x: px,
+                y: py,
+                ox: px,
+                oy: py,
+                vx: 0,
+                vy: 0,
+              });
+            }
           }
         }
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute(
-          "position",
-          new THREE.BufferAttribute(positions, 3),
-        );
-        geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
-
-        const material = new THREE.ShaderMaterial({
-          transparent: true,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          uniforms: {
-            uTime: { value: 0 },
-            uPointSize: { value: 5.5 },
-          },
-          vertexShader: `
-            attribute float aSpeed;
-            varying float vSpeed;
-            uniform float uTime;
-            uniform float uPointSize;
-            void main() {
-              vSpeed = aSpeed;
-              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-              gl_PointSize = uPointSize * (1.0 + 0.55 * vSpeed) * (300.0 / -mvPosition.z);
-              gl_Position = projectionMatrix * mvPosition;
-            }
-          `,
-          fragmentShader: `
-            precision mediump float;
-            varying float vSpeed;
-            void main() {
-              vec2 p = gl_PointCoord * 2.0 - 1.0;
-              float r2 = dot(p, p);
-              float core = exp(-3.5 * r2);
-              float halo = exp(-1.25 * r2);
-              vec3 c1 = vec3(0.06, 0.46, 0.43); // teal
-              vec3 c2 = vec3(0.23, 0.51, 0.96); // electric blue
-              vec3 col = mix(c1, c2, clamp(vSpeed * 1.1, 0.0, 1.0));
-              float alpha = (0.9 * core + 0.55 * halo) * (0.65 + 0.55 * clamp(vSpeed, 0.0, 1.0));
-              gl_FragColor = vec4(col, alpha);
-            }
-          `,
-        });
-
-        const points = new THREE.Points(geometry, material);
-        simScene.add(points);
-
-        // Subtle foggy lift so the points feel volumetric without darkening the page.
-        const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-        simScene.add(ambient);
-
-        const raycaster = new THREE.Raycaster();
-        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-        const pointer = { x: 0, y: 0, down: false, vx: 0, vy: 0 };
-        let lastPointerX = 0;
-        let lastPointerY = 0;
-        let lastT = performance.now();
-
-        function resize() {
-          const w = canvas.clientWidth || 800;
-          const h = canvas.clientHeight || 340;
-          simRenderer.setSize(w, h, false);
-          simCamera.aspect = w / h;
-          simCamera.updateProjectionMatrix();
-        }
-
-        function setPointerFromEvent(event) {
+        function setPointer(event) {
           const rect = canvas.getBoundingClientRect();
-          const x = event.clientX - rect.left;
-          const y = event.clientY - rect.top;
-          const nx = (x / rect.width) * 2 - 1;
-          const ny = -(y / rect.height) * 2 + 1;
-          pointer.vx = x - lastPointerX;
-          pointer.vy = y - lastPointerY;
-          lastPointerX = x;
-          lastPointerY = y;
-          pointer.x = nx;
-          pointer.y = ny;
+          pointer.x = event.clientX - rect.left;
+          pointer.y = event.clientY - rect.top;
         }
 
-        function onPointerDown(event) {
-          pointer.down = true;
+        function onDown(event) {
+          pointer.active = true;
+          pointer.force = 1.2;
+          setPointer(event);
           canvas.setPointerCapture(event.pointerId);
-          setPointerFromEvent(event);
         }
-        function onPointerMove(event) {
-          setPointerFromEvent(event);
+
+        function onMove(event) {
+          setPointer(event);
+          if (pointer.active) pointer.force = 1.0;
         }
-        function onPointerUp(event) {
-          pointer.down = false;
+
+        function onUp(event) {
+          pointer.active = false;
+          pointer.force = 0;
           canvas.releasePointerCapture(event.pointerId);
         }
 
-        canvas.addEventListener("pointerdown", onPointerDown);
-        canvas.addEventListener("pointermove", onPointerMove);
-        canvas.addEventListener("pointerup", onPointerUp);
-        canvas.addEventListener("pointerleave", () => {
-          pointer.down = false;
-        });
-        window.addEventListener("resize", resize);
-        resize();
+        function step(dt, timeSec) {
+          const pull = 6.2;
+          const drag = 0.955;
+          const spread = 0.038;
+          const radius = Math.min(width, height) * 0.2;
+          const maxSpeed = 14;
+          const maxOffsetX = width * 0.42;
+          const maxOffsetY = height * 0.42;
+          const recoveryBlend = 0.03;
+          const flowStrength = 0.34;
 
-        function idx(r, c) {
-          return r * cols + c;
+          for (let index = 0; index < points.length; index++) {
+            const point = points[index];
+            const dxHome = point.ox - point.x;
+            const dyHome = point.oy - point.y;
+            point.vx += dxHome * pull * dt;
+            point.vy += dyHome * pull * dt;
+
+            if (pointer.active) {
+              const dx = point.x - pointer.x;
+              const dy = point.y - pointer.y;
+              const d2 = dx * dx + dy * dy;
+              if (d2 < radius * radius) {
+                const d = Math.sqrt(d2) || 1;
+                const falloff = 1 - d / radius;
+                const kick = pointer.force * falloff * 132 * dt;
+                point.vx += (dx / d) * kick;
+                point.vy += (dy / d) * kick;
+              }
+            }
+
+            const c = index % cols;
+            const r = Math.floor(index / cols);
+            if (c > 0) {
+              const left = points[index - 1];
+              point.vx += (left.x - point.x) * spread;
+              point.vy += (left.y - point.y) * spread;
+            }
+            if (c < cols - 1) {
+              const right = points[index + 1];
+              point.vx += (right.x - point.x) * spread;
+              point.vy += (right.y - point.y) * spread;
+            }
+            if (r > 0) {
+              const up = points[index - cols];
+              point.vx += (up.x - point.x) * spread;
+              point.vy += (up.y - point.y) * spread;
+            }
+            if (r < rows - 1) {
+              const down = points[index + cols];
+              point.vx += (down.x - point.x) * spread;
+              point.vy += (down.y - point.y) * spread;
+            }
+
+            const nx = point.x / width - 0.5;
+            const ny = point.y / height - 0.5;
+            const swirl =
+              Math.sin(timeSec * 0.75 + nx * 5.5) *
+              Math.cos(timeSec * 0.55 + ny * 4.6);
+            point.vx += (-ny * flowStrength + swirl * 0.06) * dt * 60;
+            point.vy += (nx * flowStrength + swirl * 0.045) * dt * 60;
+
+            if (!Number.isFinite(point.vx) || !Number.isFinite(point.vy)) {
+              point.vx = 0;
+              point.vy = 0;
+            }
+            point.vx = Math.max(-maxSpeed, Math.min(maxSpeed, point.vx));
+            point.vy = Math.max(-maxSpeed, Math.min(maxSpeed, point.vy));
+            point.vx *= drag;
+            point.vy *= drag;
+            point.x += point.vx;
+            point.y += point.vy;
+
+            point.x += (point.ox - point.x) * recoveryBlend;
+            point.y += (point.oy - point.y) * recoveryBlend;
+
+            const offX = point.x - point.ox;
+            const offY = point.y - point.oy;
+            if (
+              !Number.isFinite(point.x) ||
+              !Number.isFinite(point.y) ||
+              Math.abs(offX) > maxOffsetX ||
+              Math.abs(offY) > maxOffsetY
+            ) {
+              point.x = point.ox;
+              point.y = point.oy;
+              point.vx = 0;
+              point.vy = 0;
+            }
+          }
         }
 
-        // Spring-based surface (stable, cheap) + pointer-driven impulses.
-        function step(dt) {
-          const stiffness = 36.0;
-          const damping = 0.92;
-          const anchor = 8.5;
-          const impulse = 0.015;
-          const posAttr = geometry.attributes.position;
-          const pos = posAttr.array;
+        function draw() {
+          ctx.clearRect(0, 0, width, height);
+          const gradient = ctx.createLinearGradient(0, 0, width, height);
+          gradient.addColorStop(0, "rgba(11, 109, 102, 0.92)");
+          gradient.addColorStop(1, "rgba(34, 98, 201, 0.88)");
 
-          // Anchor back to the base plane and apply neighbor springs.
-          for (let i = 0; i < pointCount; i++) {
-            const i3 = i * 3;
-            const y = pos[i3 + 1];
-            const by = basePositions[i3 + 1];
-            velocities[i3 + 1] += -(y - by) * anchor * dt;
+          for (let i = 0; i < points.length; i++) {
+            const point = points[i];
+            const speed = Math.min(
+              1,
+              Math.hypot(point.vx, point.vy) / 5 + (pointer.active ? 0.06 : 0),
+            );
+            const radius = 0.8 + speed * 1.8;
+            ctx.globalAlpha = 0.28 + speed * 0.62;
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+            ctx.fill();
           }
 
-          for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-              const i = idx(r, c);
-              const i3 = i * 3;
-              const y = pos[i3 + 1];
-              let sum = 0;
-              let n = 0;
-              if (r > 0) {
-                sum += pos[(idx(r - 1, c) * 3) + 1];
-                n++;
-              }
-              if (r < rows - 1) {
-                sum += pos[(idx(r + 1, c) * 3) + 1];
-                n++;
-              }
-              if (c > 0) {
-                sum += pos[(idx(r, c - 1) * 3) + 1];
-                n++;
-              }
-              if (c < cols - 1) {
-                sum += pos[(idx(r, c + 1) * 3) + 1];
-                n++;
-              }
-              const avg = n ? sum / n : y;
-              velocities[i3 + 1] += (avg - y) * stiffness * dt;
-            }
+          if (pointer.active) {
+            ctx.globalAlpha = 0.25;
+            ctx.fillStyle = "rgba(34, 98, 201, 0.55)";
+            ctx.beginPath();
+            ctx.arc(pointer.x, pointer.y, Math.min(width, height) * 0.07, 0, Math.PI * 2);
+            ctx.fill();
           }
 
-          // Pointer impulse: raycast onto y=0 plane, then inject a gaussian bump.
-          if (pointer.down) {
-            raycaster.setFromCamera(pointer, simCamera);
-            const hit = new THREE.Vector3();
-            if (raycaster.ray.intersectPlane(plane, hit)) {
-              const sx = (hit.x + sizeX * 0.5) / sizeX;
-              const sz = (hit.z + sizeZ * 0.5) / sizeZ;
-              const cx = Math.floor(sx * (cols - 1));
-              const cz = Math.floor(sz * (rows - 1));
-              const strength = Math.min(
-                1.8,
-                0.55 + 0.04 * Math.hypot(pointer.vx, pointer.vy),
-              );
-              const radius = 5.5;
-              const dir = pointer.vy < 0 ? 1 : -1;
-              for (let rr = -9; rr <= 9; rr++) {
-                for (let cc = -9; cc <= 9; cc++) {
-                  const r = cz + rr;
-                  const c = cx + cc;
-                  if (r < 0 || r >= rows || c < 0 || c >= cols) continue;
-                  const d2 = rr * rr + cc * cc;
-                  const falloff = Math.exp(-d2 / (radius * radius));
-                  const i = idx(r, c);
-                  velocities[i * 3 + 1] +=
-                    impulse * strength * falloff * dir;
-                }
-              }
-            }
-          }
-
-          for (let i = 0; i < pointCount; i++) {
-            const i3 = i * 3;
-            velocities[i3 + 1] *= damping;
-            pos[i3 + 1] += velocities[i3 + 1] * 60.0 * dt;
-
-            // Soft clamp (keeps it clean, no crazy spikes).
-            if (pos[i3 + 1] > 2.2) {
-              pos[i3 + 1] = 2.2;
-              velocities[i3 + 1] *= -0.25;
-            } else if (pos[i3 + 1] < -2.0) {
-              pos[i3 + 1] = -2.0;
-              velocities[i3 + 1] *= -0.25;
-            }
-
-            const sp = Math.min(1, Math.abs(velocities[i3 + 1]) * 0.9);
-            speeds[i] = speeds[i] * 0.88 + sp * 0.12;
-          }
-
-          geometry.attributes.aSpeed.needsUpdate = true;
-          posAttr.needsUpdate = true;
+          ctx.globalAlpha = 1;
         }
 
         function animate(now) {
-          const dt = Math.min(0.033, (now - lastT) / 1000);
-          lastT = now;
-          material.uniforms.uTime.value = now * 0.001;
-          step(dt);
-          points.rotation.y += 0.08 * dt;
-          simRenderer.render(simScene, simCamera);
+          const dt = Math.min(0.033, (now - lastTime) / 1000);
+          lastTime = now;
+          step(dt, now * 0.001);
+          draw();
           requestAnimationFrame(animate);
         }
 
-        requestAnimationFrame((t) => {
-          lastT = t;
+        canvas.addEventListener("pointerdown", onDown);
+        canvas.addEventListener("pointermove", onMove);
+        canvas.addEventListener("pointerup", onUp);
+        canvas.addEventListener("pointerleave", () => {
+          pointer.active = false;
+          pointer.force = 0;
+        });
+        window.addEventListener("resize", resize);
+
+        resize();
+        requestAnimationFrame((now) => {
+          lastTime = now;
           requestAnimationFrame(animate);
         });
       })();
