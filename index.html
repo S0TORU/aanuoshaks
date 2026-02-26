@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aanu Oshakuade</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500;600&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8f7f4;
+      --ink: #161616;
+      --muted: #4b5563;
+      --accent: #0f766e;
+    }
+    body {
+      margin: 0;
+      background: radial-gradient(120% 120% at 20% 10%, rgba(15,118,110,0.04), transparent 38%),
+                  radial-gradient(100% 100% at 80% 0%, rgba(15,118,110,0.05), transparent 34%),
+                  var(--bg);
+      color: var(--ink);
+      font-family: 'Source Serif 4', system-ui, -apple-system, serif;
+      line-height: 1.82;
+      letter-spacing: -0.01em;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .wrap {
+      max-width: 840px;
+      margin: 0 auto;
+      padding: 96px 22px 120px;
+      position: relative;
+      z-index: 1;
+    }
+    .name {
+      font-family: 'Cormorant Garamond', 'Source Serif 4', serif;
+      font-size: clamp(3rem, 6vw, 3.8rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 0.96;
+      margin: 0;
+    }
+    .tagline {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 1.12rem;
+      letter-spacing: 0.01em;
+    }
+    .section-heading {
+      font-size: 0.9rem;
+      letter-spacing: 0.24em;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #6b7280;
+      margin: 52px 0 16px;
+    }
+    .section-heading:first-of-type { margin-top: 64px; }
+    p, li { font-size: 1.07rem; }
+    ul { margin: 0; padding-left: 1.25rem; }
+    a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+    a:hover { color: var(--accent); border-color: rgba(15,118,110,0.35); }
+    .footer { margin-top: 88px; display: flex; flex-wrap: wrap; gap: 16px 28px; font-size: 0.93rem; color: #6b7280; }
+    #bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; filter: drop-shadow(0 12px 24px rgba(0,0,0,0.08)); }
+  </style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <main class="wrap">
+    <header>
+      <h1 class="name">Aanu Oshakuade</h1>
+      <p class="tagline">Computer Engineer | Digital Twins | Triton/JAX | Graph Networks | Computer Vision | MLOps | Azure AI | Adversarial ML</p>
+    </header>
+
+    <section>
+      <h2 class="section-heading">Now</h2>
+      <p>i'm building high-performance GPU-accelerated simulation platforms and production AI systems focused on computational biology modeling, multi-sensor fusion, RF signal processing &amp; DSP, computer vision for surveillance, large-scale parallel workloads, and custom FPGA acceleration — all optimized end-to-end with Triton, JAX, MLOps, and secure cloud infrastructure.</p>
+    </section>
+
+    <section>
+      <h2 class="section-heading">Background</h2>
+      <p>B.S. Computer Engineering — Oral Roberts University (2024). Hands-on engineer with deep experience in accelerated computing, hardware/software co-design, production ML systems, and secure infrastructure. Delivered end-to-end computer vision pipelines (retina imaging + surveillance), reinforcement learning environments with multi-sensor fusion, FPGA accelerators (FFT/DSP), RF signal detection workflows, and GPU-parallel simulations for biological modeling, planetary defense, and edge systems.</p>
+    </section>
+
+    <section>
+      <h2 class="section-heading">Interests</h2>
+      <div class="grid md:grid-cols-2 gap-x-10 gap-y-5">
+        <div>digital twins &amp; high-fidelity 3D simulations (computational biology, tumor microenvironments, biological modeling)</div>
+        <div>multi-sensor fusion for autonomous systems (IMU/GPS/satellite/weather/IoT integration)</div>
+        <div>RF signal detection &amp; DSP (spread-spectrum, demodulation, anomaly detection workflows)</div>
+        <div>computer vision for surveillance (edge-native multi-camera tracking, YOLO pipelines, real-time annotation &amp; evidence generation)</div>
+        <div>multi-agent reinforcement learning &amp; swarm coordination (drone navigation, real-time sim-to-real)</div>
+        <div>accelerated computing: Triton, JAX, CUDA, vLLM, custom FPGA/RTL accelerators (FFT, DSP, inference)</div>
+        <div>MLOps &amp; production pipelines (fine-tuning, evaluation, secure cloud inference on Azure/AWS)</div>
+        <div>physics-informed neural networks, graph networks, and hardware-software co-design at the edge</div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="section-heading">Vision</h2>
+      <p>we're at a singular point where the convergence of massive compute power, multimodal sensing, and physics-grounded modeling is making it possible to simulate and reason about complex real-world systems in ways that actually match reality.</p>
+      <p>what really gets me is how these technologies are letting engineers move fluidly between hardware-level optimization, algorithmic insight, and production deployment — turning raw data streams into systems that work reliably under real constraints.</p>
+      <p class="font-medium">i believe that:</p>
+      <ul class="space-y-3">
+        <li>the most valuable systems are built by people who deeply respect every layer — from the physics of the problem all the way through to the final inference pipeline.</li>
+        <li>when hardware acceleration, signal intelligence, and simulation are thoughtfully integrated, you start solving problems that used to feel out of reach.</li>
+        <li>technical depth and practical execution will always matter more than hype — the quiet, rigorous work is what actually moves fields forward.</li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      <a href="https://www.linkedin.com/in/aanu-oshakuade-26a2002ab" target="_blank">LinkedIn</a>
+      <a href="mailto:aanuoshaks@gmail.com">Email</a>
+      <a href="#">Resume (PDF)</a>
+    </footer>
+  </main>
+
+  <script>
+    // Soft halo point cloud with gentle drift
+    let scene, camera, renderer, points;
+    const particleCount = 14000;
+    let positions, velocities, colors;
+
+    function initThree() {
+      const canvas = document.getElementById('bg');
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1200);
+      camera.position.z = 58;
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      const geometry = new THREE.BufferGeometry();
+      positions = new Float32Array(particleCount * 3);
+      velocities = new Float32Array(particleCount * 3);
+      colors = new Float32Array(particleCount * 3);
+
+      const palette = [
+        new THREE.Color('#0f766e'), // deep teal
+        new THREE.Color('#1f2937'), // charcoal
+        new THREE.Color('#6ee7b7')  // soft mint
+      ];
+
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        const radius = 24 + Math.random() * 22;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+
+        positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta) * 0.82;
+        positions[i3 + 2] = radius * Math.cos(phi);
+
+        velocities[i3] = (Math.random() - 0.5) * 0.012;
+        velocities[i3 + 1] = (Math.random() - 0.5) * 0.012;
+        velocities[i3 + 2] = (Math.random() - 0.5) * 0.01;
+
+        const tint = palette[Math.floor(Math.random() * palette.length)];
+        colors[i3] = tint.r * (0.7 + Math.random() * 0.25);
+        colors[i3 + 1] = tint.g * (0.7 + Math.random() * 0.25);
+        colors[i3 + 2] = tint.b * (0.7 + Math.random() * 0.25);
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: 0.11,
+        sizeAttenuation: true,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.58,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+
+      points = new THREE.Points(geometry, material);
+      scene.add(points);
+
+      window.addEventListener('resize', onResize);
+      animate();
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const posAttr = points.geometry.attributes.position;
+      const arr = posAttr.array;
+
+      for (let i = 0; i < particleCount * 3; i += 3) {
+        velocities[i] += (Math.random() - 0.5) * 0.004;
+        velocities[i + 1] += (Math.random() - 0.5) * 0.004;
+        velocities[i + 2] += (Math.random() - 0.5) * 0.003;
+
+        velocities[i] *= 0.985;
+        velocities[i + 1] *= 0.985;
+        velocities[i + 2] *= 0.985;
+
+        arr[i] += velocities[i];
+        arr[i + 1] += velocities[i + 1];
+        arr[i + 2] += velocities[i + 2];
+      }
+
+      posAttr.needsUpdate = true;
+      points.rotation.y += 0.00022;
+      points.rotation.x += 0.00008;
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('load', initThree);
+  </script>
+</body>
+</html>
